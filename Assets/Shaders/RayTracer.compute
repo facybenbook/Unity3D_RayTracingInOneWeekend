@@ -1,164 +1,105 @@
 ﻿#pragma kernel RayTrace
 
+#define MAX_RECURSION 15
+
 #define MIN_T .001
-#define MAX_T 999.  
+#define MAX_T 1e5 
 
-RWTexture2D<float4> RenderOut;
+#define HALF_PI 1.57079632675
+#define PI 3.1415926535
+#define TWO_PI 6.283185307
 
+#include "Hash.cginc"
+
+#include "Ray.cginc"
+#include "Hitables.cginc"
+
+#include "Helper.cginc"
+
+struct RayTracerLayout
+{
+	float4 accumColor;
+};
+
+RWStructuredBuffer<RayTracerLayout> rayTraceLayout;
+
+float uFrame;
 float uWidth;
 float uHeight;
 float uRatio;
+float uSampleCount;
 
-struct Ray
+void Intersect(Ray r, inout HitRecord hitRecord)
 {
-	float3 origin;
-	float3 direction;
+	// reset hitrecord
+	hitRecord = InitHitRecord(MIN_T, MAX_T);
 
-	float3 PointAtParameter(float t);
-};
-
-float3 Ray::PointAtParameter(float t)
-{
-	return origin + direction * t;
-}
-
-Ray GetRay(float3 origin, float3 direction)
-{
-	Ray r;
-
-	r.origin = origin;
-	r.direction = direction;
-
-	return r;
-}
-
-struct HitRecord
-{
-	bool isHit;
-
-	float tMin;
-	float tMax;
-	
-	float t;
-	float3 p;
-	float3 normal;
-};
-
-HitRecord GetHitRecord(float tMin, float tMax)
-{
-	HitRecord h;
-
-	h.isHit = false;
-
-	h.tMin = tMin;
-	h.tMax = tMax;
-
-	h.t = tMax;
-
-	// just random values for debugging
-	h.p = float3(0., 1., 0.);
-	h.normal = float3(1., 0., 0.);
-
-	return h;
-}
-
-struct Sphere
-{
-	float3 center;
-	float radius;
-
-	void Intersect(Ray r, inout HitRecord rec);
-};
-
-Sphere GetSphere(float3 center, float radius)
-{
-	Sphere s;
-	
-	s.center = center;
-	s.radius = radius;
-
-	return s;
-}
-
-void Sphere::Intersect(Ray r, inout HitRecord rec)
-{
-	float3 oc = r.origin - center;
-	float a = dot(r.direction, r.direction);
-	float b = dot(oc, r.direction);
-	float c = dot(oc, oc) - radius * radius;
-	float discriminant = b * b - a * c;
-
-	if (discriminant > 0)
-	{
-		float temp = (-b - sqrt(discriminant)) / a;
-
-		if (temp < rec.tMax && temp > rec.tMin)
-		{
-			rec.isHit = true;
-			rec.tMax = temp;
-			
-			rec.t = temp;
-			rec.p = r.PointAtParameter(temp);
-			rec.normal = (rec.p - center) / radius;
-
-			return;
-		}
-
-		temp = (-b + sqrt(discriminant)) / a;
-
-		if (temp < rec.tMax && temp > rec.tMin)
-		{
-			rec.isHit = true;
-			rec.tMax = temp;
-			
-			rec.t = temp;
-			rec.p = r.PointAtParameter(temp);
-			rec.normal = (rec.p - center) / radius;
-
-			return;
-		}
-	}
-
-	return;
-}
-
-float3 RenderScene(Ray r)
-{
-	Sphere sphere_a = GetSphere(float3(0, 0, -1.), .5);
-	Sphere sphere_b = GetSphere(float3(0, -100.5, -1.), 100.);
-
-	HitRecord hitRecord = GetHitRecord(MIN_T, MAX_T);
+	Sphere sphere_a = InitSphere(float3(0, 0, -1.), 1.);
+	Sphere sphere_b = InitSphere(float3(0, -101., -1.), 100.);
 
 	sphere_a.Intersect(r, hitRecord);
 	sphere_b.Intersect(r, hitRecord);
-
-	if (hitRecord.isHit)
-	{
-		float3 hitNormal = .5 * (hitRecord.normal + 1.);
-
-		return hitNormal;
-	}
-	else
-	{
-		float gradient = .5 * (r.direction.y + 1.);
-		float3 sky = (1. - gradient) * float3(1., 1., 1.) + gradient * float3(.5, .7, 1.);
-
-		return sky;
-	}
 }
 
-[numthreads(8,8,1)]
+float3 RenderScene(Ray r, inout float seed)
+{
+	float3 col = float3(1., 1., 1.);
+	HitRecord hitRecord = InitHitRecord(MIN_T, MAX_T);
+
+	for (int i = 0; i < MAX_RECURSION; i++)
+	{
+		Intersect(r, hitRecord);
+
+		if (hitRecord.isHit)
+		{
+			col *= .5;
+
+			float3 target = hitRecord.p + hitRecord.normal + RandomInUnitSphere(seed);
+			
+			// update ray with scatterd ray 
+			r = InitRay(hitRecord.p, normalize(target - hitRecord.p));
+		}
+		else
+		{
+			float gradient = .5 * (r.direction.y + 1.);
+			float3 sky = (1. - gradient) * float3(1., 1., 1.) + gradient * float3(.5, .7, 1.);
+
+			return sky;
+		}
+	}
+
+	return col;
+}
+
+[numthreads(8, 8, 8)]
 void RayTrace(uint3 id : SV_DispatchThreadID)
 {
-	float2 uv = float2((float)id.x / uWidth, (float)id.y / uHeight);
+	float t = uFrame * .1;
+	uint bufferIndex = id.x
+		+ (id.y * (uint)uWidth)
+		+ (id.z * (uint)uWidth * (uint)uHeight);
+	float seed = float(bufferIndex);// float(BaseHash(uint2(id.xy))) / float(0xffffffffU) + t;
+
+	// setup ray
+	float2 randomSampleOffset = Hash2(seed);
+
+	float2 uv = float2(
+		((float)id.x + randomSampleOffset.x) / uWidth,
+		((float)id.y + randomSampleOffset.y) / uHeight);
 	float3 pixel = float3((uv - .5) * 2. * float2(uRatio, 1.), 0.);
 
 	float3 origin = float3(0., 0., 1.);
 	float3 direction = normalize(pixel - origin);
 	
-	Ray r = GetRay(origin, direction);
+	Ray r = InitRay(origin, direction);
 
-	float3 col = RenderScene(r);
+	// render
+	float3 col = RenderScene(r, seed);
 
-	RenderOut[id.xy] = float4(col, 1.);
+	// gamma correction 
+	col = pow(max(col, 0.), .45);
+
+	// output
+	rayTraceLayout[bufferIndex].accumColor = float4(col, 1.);
 }
+

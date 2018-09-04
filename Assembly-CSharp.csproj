@@ -61,12 +61,17 @@
   <ItemGroup>
     <Compile Include="Assets\Scripts\RayTracer.cs" />
     <Compile Include="Assets\Scripts\RenderImage.cs" />
+    <None Include="Assets\Shaders\Hitables.cginc" />
+    <None Include="Assets\Shaders\Hash.cginc" />
+    <None Include="Assets\Shaders\Helper.cginc" />
+    <None Include="Assets\Shaders\BlendAccum.shader" />
+    <None Include="Assets\Shaders\Ray.cginc" />
     <None Include="Assets\Shaders\RayTracer.compute" />
-    <Reference Include="Unity.PackageManagerUI.Editor">
-      <HintPath>D:/01.Works/2018.09_RayTracingInOneWeekend/Library/ScriptAssemblies/Unity.PackageManagerUI.Editor.dll</HintPath>
-    </Reference>
     <Reference Include="UnityEditor.StandardEvents">
       <HintPath>D:/01.Works/2018.09_RayTracingInOneWeekend/Library/ScriptAssemblies/UnityEditor.StandardEvents.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.PackageManagerUI.Editor">
+      <HintPath>D:/01.Works/2018.09_RayTracingInOneWeekend/Library/ScriptAssemblies/Unity.PackageManagerUI.Editor.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.AIModule">
       <HintPath>C:/Program Files/Unity/Editor/Data/Managed/UnityEngine/UnityEngine.AIModule.dll</HintPath>

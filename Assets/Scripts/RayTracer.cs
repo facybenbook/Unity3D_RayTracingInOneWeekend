@@ -6,62 +6,114 @@ public class RayTracer : MonoBehaviour {
     public ComputeShader mRayTracer;
 
     private const int w = 1280, h = 720;
+    private const int samples = 128;
     private const float ratio = (float)w / (float)h;
     private const int numThreads = 8;
     private const int numGroupX = w / numThreads;
     private const int numGroupY = h / numThreads;
-    private int kernel;
+    private const int numGroupZ = samples / numThreads;
+    private int kernel_ray_trace;
 
-    private RenderTexture _renderOut;
-    public RenderTexture renderOut
+    private int animFrame = 0;
+
+    struct RayTracerLayout
     {
-        get { return _renderOut; }
+        public Vector4 accumColor;
     }
 
-	void Start ()
+    public int sampleCount
+    {
+        get { return samples; }
+    }
+
+    public int width
+    {
+        get { return w; }
+    }
+
+    public int height
+    {
+        get { return h; }
+    }
+
+    private ComputeBuffer _rayTraceLayout;
+    public ComputeBuffer rayTraceLayout
+    {
+        get { return _rayTraceLayout; }
+    }
+
+    #region MonoBehaviour
+    void Start ()
     {
         InitResources();
-	}
+    }
 	
 	void Update ()
     {
         DispatchComputeShader();
-	}
 
+        if (animFrame > 9999) animFrame = 0;
+
+        animFrame++;
+    }
+
+    private void OnDestroy()
+    {
+        DestroyResources();
+    }
+    #endregion
+
+    #region Compute Shader
     void DispatchComputeShader()
     {
-        mRayTracer.SetTexture(kernel, "RenderOut", _renderOut);
+        mRayTracer.SetFloat("uFrame", (float)animFrame);
+        mRayTracer.SetBuffer(kernel_ray_trace, "rayTraceLayout", _rayTraceLayout);
 
-        mRayTracer.Dispatch(kernel, numGroupX, numGroupY, 1);
+        mRayTracer.Dispatch(kernel_ray_trace, numGroupX, numGroupY, numGroupZ);
+    }
+    #endregion
+
+    #region Resources
+    ComputeBuffer InitComputeBuffer(int x, int y, int z)
+    {
+        int size = x * y * z;
+
+        RayTracerLayout[] layout = new RayTracerLayout[size];
+
+        for(int i = 0; i < size; i++)
+        {
+            layout[i].accumColor = Vector4.zero;
+        }
+
+        const int stride = 16; // size of RayTraceLayout
+        ComputeBuffer b = new ComputeBuffer(size, stride);
+
+        b.SetData(layout);
+
+        return b;
     }
 
     void InitResources()
     {
         // render texture for compute shader output
-        _renderOut = new RenderTexture(w, h, 0);
-        _renderOut.format = RenderTextureFormat.ARGB32;
-        _renderOut.filterMode = FilterMode.Bilinear;
-        _renderOut.wrapMode = TextureWrapMode.Clamp;
-        _renderOut.enableRandomWrite = true;
-        _renderOut.Create();
+        _rayTraceLayout = InitComputeBuffer(w, h, samples);
 
         // setup compute shader 
-        kernel = mRayTracer.FindKernel("RayTrace");
+        kernel_ray_trace = mRayTracer.FindKernel("RayTrace");
 
         mRayTracer.SetFloat("uWidth", (float)w);
         mRayTracer.SetFloat("uHeight", (float)h);
         mRayTracer.SetFloat("uRatio", ratio);
+        mRayTracer.SetFloat("uSampleCount", (float)samples);
     }
 
     void DestroyResources()
     {
-        // destroy render texture
-        if(_renderOut != null)
+        if (_rayTraceLayout != null)
         {
-            _renderOut.Release();
-            _renderOut = null;
-            Destroy(_renderOut);
+            _rayTraceLayout.Dispose();
+            _rayTraceLayout = null;
         }
-
     }
+    #endregion
 }
