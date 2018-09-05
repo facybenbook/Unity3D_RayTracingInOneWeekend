@@ -75,10 +75,7 @@ float3 RenderScene(Ray r, inout float seed)
 void RayTrace(uint3 id : SV_DispatchThreadID)
 {
 	float t = uFrame * .1;
-	uint bufferIndex = id.x
-		+ (id.y * (uint)uWidth)
-		+ (id.z * (uint)uWidth * (uint)uHeight);
-	float seed = float(bufferIndex);// float(BaseHash(uint2(id.xy))) / float(0xffffffffU) + t;
+	float seed = float(BaseHash(uint2(id.xy))) / float(0xffffffffU) + t;
 
 	// setup ray
 	float2 randomSampleOffset = Hash2(seed);
@@ -100,6 +97,9 @@ void RayTrace(uint3 id : SV_DispatchThreadID)
 	col = pow(max(col, 0.), .45);
 
 	// output
+	uint bufferIndex = id.x
+		+ (id.y * (uint)uWidth)
+		+ (id.z * (uint)uWidth * (uint)uHeight);
 	rayTraceLayout[bufferIndex].accumColor = float4(col, 1.);
 }
 
