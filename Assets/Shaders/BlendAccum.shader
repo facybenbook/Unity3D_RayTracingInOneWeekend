@@ -63,7 +63,8 @@
 					col += uRayTraceLayout[bufferIndex].accumColor.rgb;
 				}
 				col /= uSampleCount;
-				
+				col = pow(max(col, 0.), .45);
+
 				return float4(col, 1.);
 			}
 			ENDCG

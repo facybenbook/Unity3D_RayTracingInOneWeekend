@@ -48,14 +48,13 @@ Sphere InitSphere(float3 center, float radius)
 void Sphere::Intersect(Ray r, inout HitRecord rec)
 {
 	float3 oc = r.origin - center;
-	float a = dot(r.direction, r.direction);
 	float b = dot(oc, r.direction);
 	float c = dot(oc, oc) - radius * radius;
-	float discriminant = b * b - a * c;
+	float discriminant = b * b - c;
 
 	if (discriminant > 0)
 	{
-		float temp = (-b - sqrt(discriminant)) / a;
+		float temp = (-b - sqrt(discriminant));
 
 		if (temp < rec.tMax && temp > rec.tMin)
 		{
@@ -69,7 +68,7 @@ void Sphere::Intersect(Ray r, inout HitRecord rec)
 			return;
 		}
 
-		temp = (-b + sqrt(discriminant)) / a;
+		temp = (-b + sqrt(discriminant));
 
 		if (temp < rec.tMax && temp > rec.tMin)
 		{

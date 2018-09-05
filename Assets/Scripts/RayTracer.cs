@@ -6,7 +6,7 @@ public class RayTracer : MonoBehaviour {
     public ComputeShader mRayTracer;
 
     private const int w = 1280, h = 720;
-    private const int samples = 128;
+    private const int samples = 32;
     private const float ratio = (float)w / (float)h;
     private const int numThreads = 8;
     private const int numGroupX = w / numThreads;

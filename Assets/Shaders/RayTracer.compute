@@ -1,6 +1,6 @@
 ﻿#pragma kernel RayTrace
 
-#define MAX_RECURSION 15
+#define MAX_RECURSION 2
 
 #define MIN_T .001
 #define MAX_T 1e5 
@@ -31,9 +31,6 @@ float uSampleCount;
 
 void Intersect(Ray r, inout HitRecord hitRecord)
 {
-	// reset hitrecord
-	hitRecord = InitHitRecord(MIN_T, MAX_T);
-
 	Sphere sphere_a = InitSphere(float3(0, 0, -1.), 1.);
 	Sphere sphere_b = InitSphere(float3(0, -101., -1.), 100.);
 
@@ -48,16 +45,18 @@ float3 RenderScene(Ray r, inout float seed)
 
 	for (int i = 0; i < MAX_RECURSION; i++)
 	{
+		// reset hitrecord
+		hitRecord = InitHitRecord(MIN_T, MAX_T);
+		// hit test
 		Intersect(r, hitRecord);
-
 		if (hitRecord.isHit)
 		{
 			col *= .5;
 
-			float3 target = hitRecord.p + hitRecord.normal + RandomInUnitSphere(seed);
-			
 			// update ray with scatterd ray 
-			r = InitRay(hitRecord.p, normalize(target - hitRecord.p));
+			float3 target = hitRecord.p + hitRecord.normal + RandomInUnitSphere(seed);
+			r.origin = hitRecord.p;
+			r.direction = normalize(target - hitRecord.p);
 		}
 		else
 		{
@@ -74,16 +73,18 @@ float3 RenderScene(Ray r, inout float seed)
 [numthreads(8, 8, 8)]
 void RayTrace(uint3 id : SV_DispatchThreadID)
 {
+	uint bufferIndex = id.x
+		+ (id.y * (uint)uWidth)
+		+ (id.z * (uint)uWidth * (uint)uHeight);
+
 	float t = uFrame * .1;
-	float seed = float(BaseHash(uint2(id.xy))) / float(0xffffffffU) + t;
+	float seed = Hash1((float)bufferIndex) + t;
+	float2 ratio = float2(uRatio, 1.);
 
 	// setup ray
-	float2 randomSampleOffset = Hash2(seed);
-
-	float2 uv = float2(
-		((float)id.x + randomSampleOffset.x) / uWidth,
-		((float)id.y + randomSampleOffset.y) / uHeight);
-	float3 pixel = float3((uv - .5) * 2. * float2(uRatio, 1.), 0.);
+	float2 randomSampleOffset = Hash2(seed) * 1.;
+	float2 uv = ((float2)id + randomSampleOffset) / float2(uWidth, uHeight);
+	float3 pixel = float3((uv - .5) * 2. * ratio, 0.);
 
 	float3 origin = float3(0., 0., 1.);
 	float3 direction = normalize(pixel - origin);
@@ -93,13 +94,7 @@ void RayTrace(uint3 id : SV_DispatchThreadID)
 	// render
 	float3 col = RenderScene(r, seed);
 
-	// gamma correction 
-	col = pow(max(col, 0.), .45);
-
 	// output
-	uint bufferIndex = id.x
-		+ (id.y * (uint)uWidth)
-		+ (id.z * (uint)uWidth * (uint)uHeight);
 	rayTraceLayout[bufferIndex].accumColor = float4(col, 1.);
 }
 
